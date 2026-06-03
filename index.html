@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NLP Pipeline — Deep Dive</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f2f5;color:#1a1a2e;font-size:15px;line-height:1.6}
+
+/* HERO */
+.hero{background:#0f1123;color:#fff;padding:2rem 2.5rem 2.2rem;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 60% 80% at 80% 50%,rgba(108,99,255,.18) 0%,transparent 70%);pointer-events:none}
+.badge-row{display:flex;align-items:center;gap:10px;margin-bottom:1rem}
+.pill{background:#6c63ff;color:#fff;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:4px 14px;border-radius:999px}
+.pill-sub{color:rgba(255,255,255,.5);font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.04em}
+.hero h1{font-size:1.9rem;font-weight:800;letter-spacing:-.02em;margin-bottom:.4rem}
+.hero p{color:rgba(255,255,255,.6);font-size:.9rem;max-width:580px;line-height:1.6}
+
+/* PAGE */
+.page{max-width:960px;margin:0 auto;padding:1.5rem 1.5rem 3rem}
+.sec-title{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#888;margin-bottom:.75rem;margin-top:.1rem}
+.card{background:#fff;border:1px solid #e2e4ea;border-radius:12px;padding:1.25rem 1.5rem;margin-bottom:1.25rem}
+.card h3{font-size:1rem;font-weight:700;margin-bottom:.5rem;color:#1a1a2e}
+.card p,.card li{font-size:.875rem;color:#444;line-height:1.65}
+.card ul,.card ol{padding-left:1.2rem;margin-top:.4rem}
+.card li{margin-bottom:.3rem}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.25rem}
+.three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1.25rem}
+.divider{border:none;border-top:1px solid #e2e4ea;margin:1.75rem 0}
+
+/* STEP FLOW */
+.step-flow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:.75rem}
+.step-box{background:#0f1123;color:#fff;font-size:12px;font-weight:600;padding:8px 14px;border-radius:8px}
+.step-arrow{color:#6c63ff;font-size:1.1rem;font-weight:700}
+
+/* STEP DEEP DIVE CARDS */
+.step-card{background:#fff;border:1px solid #e2e4ea;border-radius:12px;overflow:hidden;margin-bottom:1.5rem}
+.step-card-header{display:flex;align-items:center;gap:14px;padding:1rem 1.5rem;border-bottom:1px solid #e2e4ea;background:#f7f8fc}
+.step-num-badge{width:32px;height:32px;border-radius:50%;background:#6c63ff;color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.step-card-header h3{font-size:1rem;font-weight:700;color:#1a1a2e;margin:0}
+.step-card-header .step-sub{font-size:.78rem;color:#888;margin-top:1px}
+.step-body{padding:1.25rem 1.5rem}
+.step-body p,.step-body li{font-size:.875rem;color:#444;line-height:1.65}
+.step-body ul{padding-left:1.2rem;margin-top:.4rem}
+.step-body li{margin-bottom:.3rem}
+
+/* TOKENS */
+.tokens-wrap{display:flex;flex-wrap:wrap;gap:8px;padding:.5rem 0}
+.tok{display:inline-flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer}
+.tok-word{padding:6px 10px;border-radius:7px;font-size:13px;font-weight:600;border:1.5px solid transparent;transition:transform .12s}
+.tok:hover .tok-word{transform:translateY(-2px)}
+.tok-tag{font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:2px 6px;border-radius:4px}
+
+.t-nn .tok-word{background:#ede9fe;color:#5b21b6;border-color:#c4b5fd}.t-nn .tok-tag{background:#ede9fe;color:#5b21b6}
+.t-vb .tok-word{background:#dcfce7;color:#166534;border-color:#86efac}.t-vb .tok-tag{background:#dcfce7;color:#166534}
+.t-dt .tok-word{background:#fef9c3;color:#854d0e;border-color:#fde047}.t-dt .tok-tag{background:#fef9c3;color:#854d0e}
+.t-jj .tok-word{background:#dbeafe;color:#1e40af;border-color:#93c5fd}.t-jj .tok-tag{background:#dbeafe;color:#1e40af}
+.t-in .tok-word{background:#fce7f3;color:#9d174d;border-color:#f9a8d4}.t-in .tok-tag{background:#fce7f3;color:#9d174d}
+.t-rp .tok-word{background:#f0fdf4;color:#166534;border-color:#86efac}.t-rp .tok-tag{background:#f0fdf4;color:#166534}
+.t-cc .tok-word{background:#fff7ed;color:#9a3412;border-color:#fdba74}.t-cc .tok-tag{background:#fff7ed;color:#9a3412}
+.t-pr .tok-word{background:#f0f9ff;color:#075985;border-color:#7dd3fc}.t-pr .tok-tag{background:#f0f9ff;color:#075985}
+.t-o  .tok-word{background:#f4f4f6;color:#6b7280;border-color:#d1d5db}.t-o  .tok-tag{background:#f4f4f6;color:#6b7280}
+.t-stop .tok-word{background:#fee2e2;color:#991b1b;border-color:#fca5a5}.t-stop .tok-tag{background:#fee2e2;color:#991b1b}
+.t-keep .tok-word{background:#dcfce7;color:#166534;border-color:#86efac}.t-keep .tok-tag{background:#dcfce7;color:#166534}
+.t-stem .tok-word{background:#ede9fe;color:#5b21b6;border-color:#c4b5fd}
+.t-orig .tok-word{background:#f4f4f6;color:#6b7280;border-color:#d1d5db}
+
+/* info box */
+.info-box{background:#f7f8fc;border:1px solid #e2e4ea;border-radius:8px;padding:.7rem 1rem;font-size:.82rem;color:#444;line-height:1.6;margin-top:.75rem;min-height:40px}
+.code-box{background:#0f1123;color:#a5f3fc;border-radius:8px;padding:.9rem 1.1rem;font-size:.8rem;font-family:'Courier New',monospace;line-height:1.7;overflow-x:auto;margin-top:.75rem}
+.code-kw{color:#c084fc}.code-str{color:#86efac}.code-comment{color:#64748b}
+
+/* legend */
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin:.75rem 0 0}
+.leg{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600}
+.leg-dot{width:12px;height:12px;border-radius:3px;flex-shrink:0}
+
+/* entity chip */
+.entity-chip{display:flex;justify-content:space-between;align-items:center;padding:7px 12px;border-radius:8px;font-size:13px;font-weight:600;border:1.5px solid transparent;margin-bottom:7px}
+.chip-per{background:#ede9fe;color:#5b21b6;border-color:#c4b5fd}
+.chip-org{background:#dcfce7;color:#166534;border-color:#86efac}
+.chip-loc{background:#dbeafe;color:#1e40af;border-color:#93c5fd}
+.chip-dat{background:#fef9c3;color:#854d0e;border-color:#fde047}
+.chip-mon{background:#f0fdf4;color:#166534;border-color:#86efac}
+.chip-type{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;opacity:.7}
+
+/* example section */
+.example-panel{display:grid;grid-template-columns:260px 1fr;gap:1.25rem;align-items:start;margin-bottom:1.25rem}
+.example-list{background:#fff;border:1px solid #e2e4ea;border-radius:12px;overflow:hidden}
+.example-list .panel-header{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#888;padding:12px 14px 9px;border-bottom:1px solid #e2e4ea}
+.ex-item{padding:12px 14px;border-bottom:1px solid #f0f2f5;cursor:pointer;transition:background .15s}
+.ex-item:last-child{border-bottom:none}
+.ex-item:hover{background:#f7f8fc}
+.ex-item.active{background:#ede9fe}
+.ex-tag{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px}
+.ex-tag.news{color:#7c3aed}.ex-tag.science{color:#0369a1}.ex-tag.finance{color:#059669}.ex-tag.history{color:#b45309}
+.ex-text{font-size:12px;color:#555;line-height:1.4}
+.example-output{display:flex;flex-direction:column;gap:1rem}
+.ex-step-card{background:#fff;border:1px solid #e2e4ea;border-radius:12px;overflow:hidden}
+.ex-step-head{padding:10px 14px;border-bottom:1px solid #e2e4ea;background:#f7f8fc;display:flex;align-items:center;gap:8px}
+.ex-step-head .badge{width:20px;height:20px;border-radius:50%;background:#6c63ff;color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.ex-step-head span{font-size:12px;font-weight:700;color:#1a1a2e;text-transform:uppercase;letter-spacing:.04em}
+.ex-step-body{padding:.75rem 1rem}
+
+/* quiz */
+.qcard{background:#fff;border:1px solid #e2e4ea;border-radius:12px;padding:1.25rem 1.5rem;margin-bottom:1rem}
+.qnum{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6c63ff;margin-bottom:.35rem}
+.qtext{font-size:.9rem;font-weight:600;color:#1a1a2e;margin-bottom:.3rem;line-height:1.5}
+.qsentence{font-size:.82rem;color:#555;font-style:italic;margin-bottom:.9rem;padding:.5rem .75rem;background:#f7f8fc;border-radius:6px;border-left:3px solid #6c63ff}
+.opts{display:flex;flex-direction:column;gap:8px}
+.opt{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:8px;border:1.5px solid #e2e4ea;background:#fff;cursor:pointer;font-size:.875rem;font-weight:500;color:#1a1a2e;text-align:left;width:100%;font-family:inherit}
+.opt:hover:not([disabled]){background:#f7f8fc;border-color:#bbb}
+.opt-letter{width:22px;height:22px;border-radius:50%;background:#f0f2f5;color:#555;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.opt.correct{background:#dcfce7;border-color:#86efac;color:#166534}
+.opt.correct .opt-letter{background:#86efac;color:#166534}
+.opt.wrong{background:#fee2e2;border-color:#fca5a5;color:#991b1b}
+.opt.wrong .opt-letter{background:#fca5a5;color:#991b1b}
+.opt.show-correct{background:#dcfce7;border-color:#86efac;color:#166534}
+.opt.show-correct .opt-letter{background:#86efac;color:#166534}
+.qfeedback{margin-top:.75rem;padding:.65rem .9rem;border-radius:8px;font-size:.82rem;line-height:1.55;display:none}
+.qfeedback.ok{display:block;background:#dcfce7;color:#166534;font-weight:600}
+.qfeedback.no{display:block;background:#fee2e2;color:#7f1d1d;font-weight:600}
+.score-box{background:#fff;border:1px solid #e2e4ea;border-radius:12px;padding:1.1rem 1.5rem;display:flex;align-items:center;gap:1.25rem;margin-bottom:1.25rem;flex-wrap:wrap}
+.score-big{font-size:2rem;font-weight:800;color:#6c63ff;min-width:60px}
+.score-info strong{color:#1a1a2e;display:block;margin-bottom:2px}
+.score-info{font-size:.875rem;color:#555;line-height:1.6}
+
+/* dep parse svg */
+.tree-wrap{overflow-x:auto;padding:.5rem 0}
+
+/* use cases */
+.use-card{border-radius:10px;padding:1rem 1.1rem;border:1.5px solid transparent}
+
+@media(max-width:700px){
+  .two-col,.three-col,.example-panel{grid-template-columns:1fr}
+  .hero{padding:1.5rem}.hero h1{font-size:1.4rem}
+}
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="badge-row">
+   
+  </div>
+  <h1>The NLP Pipeline — Deep Dive</h1>
+  <p>Understand every stage of how machines read, process, and understand human language — From raw text to real insight.</p>
+</div>
+
+<div class="page">
+
+<!-- ═══════════════════════════════════════════════
+     SECTION 1 — WHAT IS NLP PIPELINE
+════════════════════════════════════════════════ -->
+<div class="sec-title">What is the NLP Pipeline?</div>
+<div class="card">
+  <h3>From raw text to real understanding — step by step</h3>
+  <p>When a computer receives a sentence like <em>"Sundar Pichai, CEO of Google, earned $100 billion in 2024"</em>, it sees only characters. The <strong>NLP Pipeline</strong> is a series of processing stages that transforms this raw text into structured, meaningful data that machines can reason about — powering search engines, chatbots, medical diagnosis tools, and translation systems.</p>
+  <p style="margin-top:.5rem">Think of it like an <strong>assembly line</strong>: each stage refines the text a little more, handing off to the next stage until we have rich, structured information ready for downstream tasks.</p>
+  <div class="step-flow" style="margin-top:1rem">
+    <div class="step-box">① Raw Text</div><div class="step-arrow">→</div>
+    <div class="step-box">② Sentence Splitting</div><div class="step-arrow">→</div>
+    <div class="step-box">③ Tokenization</div><div class="step-arrow">→</div>
+    <div class="step-box">④ Stop Word Removal</div><div class="step-arrow">→</div>
+    <div class="step-box">⑤ Stemming / Lemmatization</div><div class="step-arrow">→</div>
+    <div class="step-box">⑥ POS Tagging</div><div class="step-arrow">→</div>
+    <div class="step-box">⑦ Parsing</div><div class="step-arrow">→</div>
+    <div class="step-box">⑧ NER</div><div class="step-arrow">→</div>
+    <div class="step-box">⑨ Output</div>
+  </div>
+</div>
+
+<!-- USE CASES -->
+<div class="three-col">
+  <div class="card" style="margin-bottom:0">
+    <div style="font-size:1.4rem;margin-bottom:.4rem">🔍</div>
+    <h3>Search Engines</h3>
+    <p>Google uses NLP to understand query intent, find synonyms, and rank documents by meaning — not just keyword matches.</p>
+  </div>
+  <div class="card" style="margin-bottom:0">
+    <div style="font-size:1.4rem;margin-bottom:.4rem">🤖</div>
+    <h3>Chatbots &amp; AI</h3>
+    <p>Systems like ChatGPT run the pipeline millions of times per second — tokenizing, parsing, and generating language.</p>
+  </div>
+  <div class="card" style="margin-bottom:0">
+    <div style="font-size:1.4rem;margin-bottom:.4rem">🏥</div>
+    <h3>Medical Records</h3>
+    <p>NLP extracts diagnoses, drugs, and dosages from unstructured clinical notes, enabling automated coding and analysis.</p>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ═══════════════════════════════════════════════
+     SECTION 2 — EACH STEP DEEP DIVE
+════════════════════════════════════════════════ -->
+<div class="sec-title">Each Step — Explained Deeply</div>
+
+<!-- STEP 1 -->
+<div class="step-card">
+  <div class="step-card-header">
+    <div class="step-num-badge">1</div>
+    <div>
+      <h3>Sentence Boundary Detection (Sentence Splitting)</h3>
+      <div class="step-sub">Breaking a document into individual sentences before anything else</div>
+    </div>
+  </div>
+  <div class="step-body">
+    <p>Before any other processing, a long document must be split into individual sentences. This sounds trivial — just split on periods! — but real language is full of traps. Consider: <em>"Dr. Smith works at St. John's Hospital. She earns $2.5M."</em> — periods appear inside abbreviations and numbers, not just sentence ends.</p>
+    <p style="margin-top:.5rem">NLP systems use <strong>rule-based heuristics</strong> (e.g., "period followed by a capital letter") combined with <strong>ML classifiers</strong> trained on thousands of examples to get this right.</p>
+    <p style="margin-top:.5rem"><strong>Key challenges:</strong> Abbreviations (U.S.A., Dr., Inc.), ellipses (...), quoted speech ("He said 'No.' She left."), and multilingual punctuation all cause edge cases.</p>
+    <div class="two-col" style="margin-top:.9rem;margin-bottom:0">
+      <div style="background:#f7f8fc;border:1px solid #e2e4ea;border-radius:8px;padding:.8rem 1rem">
+        <p style="font-size:.75rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.07em;margin-bottom:.4rem">Input (raw document)</p>
+        <p style="font-size:.82rem;color:#444;font-style:italic">"Dr. Smith won. She earned $2.5M in 2023."</p>
+      </div>
+      <div style="background:#dcfce7;border:1px solid #86efac;border-radius:8px;padding:.8rem 1rem">
+        <p style="font-size:.75rem;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:.07em;margin-bottom:.4rem">Output (sentences)</p>
+        <p style="font-size:.82rem;color:#166534;font-family:monospace">["Dr. Smith won.", "She earned $2.5M in 2023."]</p>
+      </div>
+    </div>
+    <div class="code-box">
+<span class="code-comment"># Python — spaCy sentence splitting</span>
+<span class="code-kw">import</span> spacy
+nlp = spacy.load(<span class="code-str">"en_core_web_sm"</span>)
+doc = nlp(<span class="code-str">"Dr. Smith won. She earned $2.5M."</span>)
+<span class="code-kw">for</span> sent <span class="code-kw">in</span> doc.sents:
+    print(sent.text)
+<span class="code-comment"># → "Dr. Smith won."</span>
+<span class="code-comment"># → "She earned $2.5M."</span></div>
+  </div>
+</div>
+
+<!-- STEP 2 -->
+<div class="step-card">
+  <div class="step-card-header">
+    <div class="step-num-badge">2</div>
+    <div>
+      <h3>Tokenization</h3>
+      <div class="step-sub">Splitting sentences into individual words and punctuation tokens</div>
+    </div>
+  </div>
+  <div class="step-body">
+    <p>A <strong>token</strong> is the atomic unit the NLP system works with. In English, tokens are usually words and punctuation marks — but it's more subtle than splitting on spaces. Consider: <em>"don't"</em> → is it one token or two (<em>"do" + "n't"</em>)? What about <em>"New York"</em>, <em>"WiFi"</em>, or <em>"U.S.A."</em>?</p>
+    <p style="margin-top:.5rem">Modern LLMs use <strong>subword tokenization</strong> (Byte Pair Encoding or WordPiece): rare words split into known pieces so any vocabulary is possible. <em>"unhappiness"</em> → <em>["un", "##happi", "##ness"]</em>. The <code>##</code> means "this continues the previous word."</p>
+    <p style="font-size:.78rem;color:#555;margin-top:.75rem;margin-bottom:.4rem">Example — click any token to inspect it:</p>
+    <div class="tokens-wrap" id="tokDemo"></div>
+    <div class="info-box" id="tokInfo">👆 Click any coloured token above to see its details.</div>
+    <div class="code-box" style="margin-top:.75rem">
+<span class="code-comment"># Subword tokenization (HuggingFace / BERT)</span>
+<span class="code-kw">from</span> transformers <span class="code-kw">import</span> AutoTokenizer
+tok = AutoTokenizer.from_pretrained(<span class="code-str">"bert-base-uncased"</span>)
+tok.tokenize(<span class="code-str">"unhappiness"</span>)
+<span class="code-comment"># → ['un', '##happi', '##ness']</span></div>
+  </div>
+</div>
+
+<!-- STEP 3 -->
+<div class="step-card">
+  <div class="step-card-header">
+    <div class="step-num-badge">3</div>
+    <div>
+      <h3>Stop Word Removal</h3>
+      <div class="step-sub">Filtering out high-frequency, low-information words</div>
+    </div>
+  </div>
+  <div class="step-body">
+    <p><strong>Stop words</strong> are very common words — <em>the, is, at, on, and, a, of</em> — that carry little semantic meaning on their own. Removing them reduces noise, speeds up processing, and improves performance for tasks like search indexing and topic modelling.</p>
+    <p style="margin-top:.5rem"><strong>However, stop word removal is NOT always a good idea.</strong> For sentiment analysis, the word <em>"not"</em> is critical — "not good" completely reversed becomes "good". Modern neural models usually skip this step entirely and let the attention mechanism learn what matters.</p>
+    <p style="font-size:.78rem;color:#555;margin-top:.75rem;margin-bottom:.4rem"><span style="color:#991b1b;font-weight:700">Red = stop word removed</span> &nbsp;|&nbsp; <span style="color:#166534;font-weight:700">Green = content word kept</span></p>
+    <div class="tokens-wrap" id="stopDemo"></div>
+    <div class="two-col" style="margin-top:.9rem;margin-bottom:0">
+      <div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:.75rem 1rem">
+        <p style="font-size:.78rem;font-weight:700;color:#991b1b;margin-bottom:.35rem">⚠️ When NOT to remove stop words</p>
+        <ul style="font-size:.8rem;color:#7f1d1d;padding-left:1rem">
+          <li>Sentiment analysis ("not bad" ≠ "bad")</li>
+          <li>Question answering ("who is he?")</li>
+          <li>Machine translation</li>
+          <li>Neural models (BERT, GPT) — they learn importance themselves</li>
+        </ul>
+      </div>
+      <div style="background:#dcfce7;border:1px solid #86efac;border-radius:8px;padding:.75rem 1rem">
+        <p style="font-size:.78rem;font-weight:700;color:#166534;margin-bottom:.35rem">✅ When stop word removal helps</p>
+        <ul style="font-size:.8rem;color:#14532d;padding-left:1rem">
+          <li>Search engine indexing (TF-IDF)</li>
+          <li>Topic modelling (LDA)</li>
+          <li>Document clustering</li>
+          <li>Keyword / keyphrase extraction</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- STEP 4 -->
+<div class="step-card">
+  <div class="step-card-header">
+    <div class="step-num-badge">4</div>
+    <div>
+      <h3>Stemming &amp; Lemmatization</h3>
+      <div class="step-sub">Reducing words to their root form so variants are treated as one concept</div>
+    </div>
+  </div>
+  <div class="step-body">
+    <p>Words appear in many inflected forms: <em>run, runs, running, ran</em>. For many tasks, all these forms mean the same concept. We reduce them to a common base so the model treats them as one entity.</p>
+    <div class="two-col" style="margin-top:.75rem;margin-bottom:.75rem">
+      <div style="border:1.5px solid #c4b5fd;border-radius:10px;padding:1rem 1.1rem">
+        <p style="font-size:.78rem;font-weight:700;color:#5b21b6;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem">Stemming — fast, crude</p>
+        <p style="font-size:.82rem;color:#444;line-height:1.65">Chops off word suffixes using simple rules. Very fast but often produces non-real-words.</p>
+        <ul style="font-size:.82rem;color:#5b21b6;margin-top:.5rem;padding-left:1rem">
+          <li>"studies" → <strong>"studi"</strong></li>
+          <li>"running" → <strong>"run"</strong></li>
+          <li>"flies" → <strong>"fli"</strong></li>
+          <li>"happily" → <strong>"happili"</strong></li>
+        </ul>
+        <p style="font-size:.78rem;color:#888;margin-top:.5rem">Algorithm: <strong>Porter Stemmer</strong>, Snowball Stemmer</p>
+      </div>
+      <div style="border:1.5px solid #86efac;border-radius:10px;padding:1rem 1.1rem">
+        <p style="font-size:.78rem;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem">Lemmatization — smart, correct</p>
+        <p style="font-size:.82rem;color:#444;line-height:1.65">Uses vocabulary + grammar rules to find the true dictionary form (lemma). Always produces real words.</p>
+        <ul style="font-size:.82rem;color:#166534;margin-top:.5rem;padding-left:1rem">
+          <li>"studies" → <strong>"study"</strong></li>
+          <li>"running" → <strong>"run"</strong></li>
+          <li>"better" → <strong>"good"</strong></li>
+          <li>"was" → <strong>"be"</strong></li>
+        </ul>
+        <p style="font-size:.78rem;color:#888;margin-top:.5rem">Tool: <strong>spaCy</strong>, NLTK WordNetLemmatizer</p>
+      </div>
+    </div>
+    <p style="font-size:.78rem;color:#555;margin-bottom:.4rem">Click a word to see its stem and lemma side by side:</p>
+    <div class="tokens-wrap" id="stemDemo"></div>
+    <div class="info-box" id="stemInfo">👆 Click a word above to compare its stem vs lemma.</div>
+  </div>
+</div>
+
+<!-- STEP 5 -->
+<div class="step-card">
+  <div class="step-card-header">
+    <div class="step-num-badge">5</div>
+    <div>
+      <h3>Part-of-Speech (POS) Tagging</h3>
+      <div class="step-sub">Assigning each token its grammatical role — noun, verb, adjective, etc.</div>
+    </div>
+  </div>
+  <div class="step-body">
+    <p>POS tagging assigns each token a grammatical tag. This tells the computer the <strong>structure</strong> of the sentence and helps resolve ambiguity. The word <em>"book"</em> can be a noun ("I read a <u>book</u>") or a verb ("Please <u>book</u> a room") — POS tagging resolves this using context.</p>
+    <p style="margin-top:.5rem">Modern taggers use <strong>neural sequence models</strong> (BiLSTM, Transformers) that look at the full sentence context and achieve over <strong>97% accuracy</strong> on standard English text.</p>
+    <div class="legend" style="margin-bottom:.75rem">
+      <div class="leg"><div class="leg-dot" style="background:#ede9fe;border:1.5px solid #c4b5fd"></div><span style="color:#5b21b6">NN — Noun</span></div>
+      <div class="leg"><div class="leg-dot" style="background:#dcfce7;border:1.5px solid #86efac"></div><span style="color:#166534">VB — Verb</span></div>
+      <div class="leg"><div class="leg-dot" style="background:#dbeafe;border:1.5px solid #93c5fd"></div><span style="color:#1e40af">JJ — Adjective</span></div>
+      <div class="leg"><div class="leg-dot" style="background:#fef9c3;border:1.5px solid #fde047"></div><span style="color:#854d0e">DT — Determiner</span></div>
+      <div class="leg"><div class="leg-dot" style="background:#fce7f3;border:1.5px solid #f9a8d4"></div><span style="color:#9d174d">IN — Preposition</span></div>
+      <div class="leg"><div class="leg-dot" style="background:#f0fdf4;border:1.5px solid #86efac"></div><span style="color:#166534">RB — Adverb</span></div>
+    </div>
+    <div class="tokens-wrap" id="posDemo"></div>
+    <div class="info-box" id="posInfo">👆 Click a word above to learn about its POS tag and what it means.</div>
+    <div class="code-box" style="margin-top:.75rem">
+<span class="code-comment"># spaCy POS tagging</span>
+<span class="code-kw">import</span> spacy
+nlp = spacy.load(<span class="code-str">"en_core_web_sm"</span>)
+doc = nlp(<span class="code-str">"The smart robot quickly learned language."</span>)
+<span class="code-kw">for</span> token <span class="code-kw">in</span> doc:
+    print(token.text, token.pos_, token.tag_)
+<span class="code-comment"># The      DET   DT</span>
+<span class="code-comment"># smart    ADJ   JJ</span>
+<span class="code-comment"># robot    NOUN  NN</span>
+<span class="code-comment"># quickly  ADV   RB</span></div>
+  </div>
+</div>
+
+<!-- STEP 6 -->
+<div class="step-card">
+  <div class="step-card-header">
+    <div class="step-num-badge">6</div>
+    <div>
+      <h3>Parsing (Syntactic Analysis)</h3>
+      <div class="step-sub">Building the grammatical structure — which words govern which</div>
+    </div>
+  </div>
+  <div class="step-body">
+    <p>Parsing reveals the grammatical structure of a sentence. There are two major styles:</p>
+    <ul style="margin:.5rem 0 .75rem 1.1rem">
+      <li><strong>Constituency Parsing</strong> — groups words into nested phrases (NP = noun phrase, VP = verb phrase, PP = prepositional phrase). Shows the sentence as a tree of constituents.</li>
+      <li><strong>Dependency Parsing</strong> — draws directed arcs between words showing which word governs which (subject, object, modifier). More popular in modern NLP because it's simpler and language-independent.</li>
+    </ul>
+    <p>Parsing answers <strong>"who did what to whom"</strong> — essential for question answering, information extraction, grammar checking, and machine translation.</p>
+    <p style="font-size:.78rem;color:#555;margin-top:.75rem;margin-bottom:.4rem">Dependency parse of: <em>"The smart robot quickly learned language."</em></p>
+    <div class="tree-wrap">
+      <svg viewBox="0 0 580 170" xmlns="http://www.w3.org/2000/svg" style="max-width:100%;min-width:380px">
+        <defs>
+          <marker id="arr" markerWidth="7" markerHeight="7" refX="3" refY="3.5" orient="auto">
+            <path d="M0,0 L7,3.5 L0,7 Z" fill="#6c63ff"/>
+          </marker>
+        </defs>
+        <!-- ROOT: learned -->
+        <rect x="230" y="12" width="80" height="30" rx="7" fill="#0f1123"/>
+        <text x="270" y="32" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">learned</text>
+        <text x="270" y="54" text-anchor="middle" font-size="9" fill="#6c63ff" font-weight="700">ROOT</text>
+
+        <!-- nsubj: robot -->
+        <line x1="155" y1="90" x2="245" y2="46" stroke="#6c63ff" stroke-width="1.5" marker-end="url(#arr)"/>
+        <rect x="110" y="92" width="90" height="28" rx="7" fill="#ede9fe"/>
+        <text x="155" y="111" text-anchor="middle" font-size="13" font-weight="600" fill="#5b21b6">robot</text>
+        <text x="193" y="72" text-anchor="middle" font-size="9" fill="#888">nsubj</text>
+
+        <!-- det: The -->
+        <line x1="60" y1="138" x2="122" y2="122" stroke="#c084fc" stroke-width="1.5" marker-end="url(#arr)"/>
+        <rect x="22" y="138" width="76" height="28" rx="7" fill="#fef9c3"/>
+        <text x="60" y="157" text-anchor="middle" font-size="13" font-weight="600" fill="#854d0e">The</text>
+        <text x="83" y="133" text-anchor="middle" font-size="9" fill="#888">det</text>
+
+        <!-- amod: smart -->
+        <line x1="155" y1="138" x2="140" y2="122" stroke="#c084fc" stroke-width="1.5" marker-end="url(#arr)"/>
+        <rect x="112" y="138" width="86" height="28" rx="7" fill="#dbeafe"/>
+        <text x="155" y="157" text-anchor="middle" font-size="13" font-weight="600" fill="#1e40af">smart</text>
+        <text x="142" y="132" text-anchor="middle" font-size="9" fill="#888">amod</text>
+
+        <!-- dobj: language -->
+        <line x1="400" y1="90" x2="296" y2="46" stroke="#6c63ff" stroke-width="1.5" marker-end="url(#arr)"/>
+        <rect x="350" y="92" width="100" height="28" rx="7" fill="#ede9fe"/>
+        <text x="400" y="111" text-anchor="middle" font-size="13" font-weight="600" fill="#5b21b6">language</text>
+        <text x="358" y="72" text-anchor="middle" font-size="9" fill="#888">dobj</text>
+
+        <!-- advmod: quickly -->
+        <line x1="510" y1="90" x2="302" y2="46" stroke="#6c63ff" stroke-width="1.5" marker-end="url(#arr)"/>
+        <rect x="462" y="92" width="96" height="28" rx="7" fill="#f0fdf4"/>
+        <text x="510" y="111" text-anchor="middle" font-size="13" font-weight="600" fill="#166534">quickly</text>
+        <text x="450" y="68" text-anchor="middle" font-size="9" fill="#888">advmod</text>
+      </svg>
+    </div>
+    <p style="font-size:.78rem;color:#888;margin-top:.2rem">Arrows point from <strong>head → dependent</strong>. Labels show the grammatical relationship (nsubj = nominal subject, dobj = direct object, advmod = adverb modifier, det = determiner, amod = adjectival modifier).</p>
+  </div>
+</div>
+
+<!-- STEP 7 -->
+<div class="step-card">
+  <div class="step-card-header">
+    <div class="step-num-badge">7</div>
+    <div>
+      <h3>Named Entity Recognition (NER)</h3>
+      <div class="step-sub">Detecting and classifying real-world named entities: people, orgs, locations, dates, money</div>
+    </div>
+  </div>
+  <div class="step-body">
+    <p>NER identifies and classifies spans of text that refer to real-world entities. It builds on all previous steps — tokenization provides units, POS helps disambiguate, parsing provides syntactic context.</p>
+    <p style="margin-top:.5rem">NER uses <strong>BIO tagging</strong>: <strong>B</strong>-eginning of an entity, <strong>I</strong>-nside (continuing) an entity, <strong>O</strong>-utside any entity. This lets multi-word entities like "New York" or "Goldman Sachs" be captured as a single unit.</p>
+    <div class="legend" style="margin:.75rem 0 .5rem">
+      <div class="leg"><div class="leg-dot" style="background:#ede9fe;border:1.5px solid #c4b5fd"></div><span style="color:#5b21b6">Person</span></div>
+      <div class="leg"><div class="leg-dot" style="background:#dcfce7;border:1.5px solid #86efac"></div><span style="color:#166534">Organization</span></div>
+      <div class="leg"><div class="leg-dot" style="background:#dbeafe;border:1.5px solid #93c5fd"></div><span style="color:#1e40af">Location</span></div>
+      <div class="leg"><div class="leg-dot" style="background:#fef9c3;border:1.5px solid #fde047"></div><span style="color:#854d0e">Date</span></div>
+      <div class="leg"><div class="leg-dot" style="background:#f0fdf4;border:1.5px solid #86efac"></div><span style="color:#166534">Money</span></div>
+      <div class="leg"><div class="leg-dot" style="background:#f4f4f6;border:1.5px solid #d1d5db"></div><span style="color:#6b7280">Other (O)</span></div>
+    </div>
+    <div class="tokens-wrap" id="nerDemo"></div>
+    <div style="margin-top:.75rem;display:flex;flex-wrap:wrap;gap:8px">
+      <div class="entity-chip chip-per" style="min-width:160px">Sundar Pichai <span class="chip-type">Person</span></div>
+      <div class="entity-chip chip-org" style="min-width:120px">Google <span class="chip-type">Org</span></div>
+      <div class="entity-chip chip-loc" style="min-width:140px">California <span class="chip-type">Location</span></div>
+      <div class="entity-chip chip-dat" style="min-width:100px">2027 <span class="chip-type">Date</span></div>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ═══════════════════════════════════════════════
+     SECTION 3 — EXAMPLES
+════════════════════════════════════════════════ -->
+<div class="sec-title">Pipeline in Action — Worked Examples</div>
+
+<div class="card">
+  <h3>Complete NLP Pipeline Example</h3>
+  <p><strong>Input:</strong></p>
+  <div class="info-box">
+    Sundar Pichai, CEO of Google, announced a new AI initiative in California.
+  </div>
+  <h4 style="margin-top:15px;">Step 1: Tokenization</h4>
+  <p>[Sundar, Pichai, CEO, Google, announced, new, AI, initiative, California]</p>
+  <h4 style="margin-top:15px;">Step 2: Stop Word Removal</h4>
+  <p>[Sundar, Pichai, CEO, Google, announced, AI, initiative, California]</p>
+  <h4 style="margin-top:15px;">Step 3: Lemmatization</h4>
+  <p>announced → announce</p>
+  <h4 style="margin-top:15px;">Step 4: POS Tagging</h4>
+  <p>Sundar/NNP, Pichai/NNP, announced/VBD, initiative/NN</p>
+  <h4 style="margin-top:15px;">Step 5: Named Entity Recognition</h4>
+  <ul>
+    <li>PERSON → Sundar Pichai</li>
+    <li>ORGANIZATION → Google</li>
+    <li>LOCATION → California</li>
+  </ul>
+</div>
+<hr class="divider">
+
+
+<!-- ═══════════════════════════════════════════════
+     SECTION 4 — QUIZ
+════════════════════════════════════════════════ -->
+<div class="sec-title">Quiz — Test Your Understanding</div>
+<div class="score-box">
+  <div class="score-big" id="scoreNum">0 / 7</div>
+  <div class="score-info">
+    <strong id="scoreTitle">Ready to test your knowledge?</strong>
+    <span id="scoreMsg">Answer all 7 questions below.</span>
+  </div>
+</div>
+
+<div class="qcard">
+  <div class="qnum">Question 1</div>
+  <div class="qtext">What is the main purpose of tokenization in the NLP pipeline?</div>
+  <div class="opts" id="q1opts">
+    <button class="opt" onclick="pick(1,0,1,this)"><span class="opt-letter">A</span>To remove stop words from text</button>
+    <button class="opt" onclick="pick(1,1,1,this)"><span class="opt-letter">B</span>To split text into individual units (words, punctuation) that all subsequent steps can process</button>
+    <button class="opt" onclick="pick(1,2,1,this)"><span class="opt-letter">C</span>To translate text from one language to another</button>
+    <button class="opt" onclick="pick(1,3,1,this)"><span class="opt-letter">D</span>To find named entities like people and organizations</button>
+  </div>
+  <div class="qfeedback" id="q1fb"></div>
+</div>
+
+<div class="qcard">
+  <div class="qnum">Question 2</div>
+  <div class="qtext">Stop word removal would be most <strong>harmful</strong> in which of these tasks?</div>
+  <div class="opts" id="q2opts">
+    <button class="opt" onclick="pick(2,0,2,this)"><span class="opt-letter">A</span>Search engine keyword indexing</button>
+    <button class="opt" onclick="pick(2,1,2,this)"><span class="opt-letter">B</span>Document topic clustering</button>
+    <button class="opt" onclick="pick(2,2,2,this)"><span class="opt-letter">C</span>Sentiment analysis of reviews ("the movie was not bad at all")</button>
+    <button class="opt" onclick="pick(2,3,2,this)"><span class="opt-letter">D</span>Extracting keywords from news articles</button>
+  </div>
+  <div class="qfeedback" id="q2fb"></div>
+</div>
+
+<div class="qcard">
+  <div class="qnum">Question 3</div>
+  <div class="qtext">What is the key difference between stemming and lemmatization?</div>
+  <div class="opts" id="q3opts">
+    <button class="opt" onclick="pick(3,0,0,this)"><span class="opt-letter">A</span>Stemming uses vocabulary lookup to produce real words; lemmatization uses suffix-chopping rules</button>
+    <button class="opt" onclick="pick(3,1,0,this)"><span class="opt-letter">B</span>Stemming only works on nouns; lemmatization works on all parts of speech</button>
+    <button class="opt" onclick="pick(3,2,0,this)"><span class="opt-letter">C</span>Lemmatization is always less accurate than stemming</button>
+    <button class="opt" onclick="pick(3,3,0,this)"><span class="opt-letter">D</span>They are exactly the same process with different names</button>
+  </div>
+  <div class="qfeedback" id="q3fb"></div>
+</div>
+
+<div class="qcard">
+  <div class="qnum">Question 4</div>
+  <div class="qtext">In BIO tagging for NER, what does the <strong>I-</strong> prefix mean?</div>
+  <div class="opts" id="q4opts">
+    <button class="opt" onclick="pick(4,0,1,this)"><span class="opt-letter">A</span>The word is completely outside any entity</button>
+    <button class="opt" onclick="pick(4,1,1,this)"><span class="opt-letter">B</span>The word is Inside (continuing) a named entity that already began</button>
+    <button class="opt" onclick="pick(4,2,1,this)"><span class="opt-letter">C</span>The word is an Identifier — a unique keyword in the sentence</button>
+    <button class="opt" onclick="pick(4,3,1,this)"><span class="opt-letter">D</span>The word begins a new entity of the same type as the previous one</button>
+  </div>
+  <div class="qfeedback" id="q4fb"></div>
+</div>
+
+<div class="qcard">
+  <div class="qnum">Question 5</div>
+  <div class="qtext">What POS tag does the word <strong>"quickly"</strong> receive?</div>
+  <div class="opts" id="q5opts">
+    <button class="opt" onclick="pick(5,0,2,this)"><span class="opt-letter">A</span>NN — Noun</button>
+    <button class="opt" onclick="pick(5,1,2,this)"><span class="opt-letter">B</span>JJ — Adjective</button>
+    <button class="opt" onclick="pick(5,2,2,this)"><span class="opt-letter">C</span>RB — Adverb</button>
+    <button class="opt" onclick="pick(5,3,2,this)"><span class="opt-letter">D</span>VB — Verb</button>
+  </div>
+  <div class="qfeedback" id="q5fb"></div>
+</div>
+
+<div class="qcard">
+  <div class="qnum">Question 6</div>
+  <div class="qtext">Which parsing style draws <strong>directed arcs between individual words</strong> to show grammatical relationships?</div>
+  <div class="opts" id="q6opts">
+    <button class="opt" onclick="pick(6,0,0,this)"><span class="opt-letter">A</span>Dependency Parsing</button>
+    <button class="opt" onclick="pick(6,1,0,this)"><span class="opt-letter">B</span>Constituency Parsing</button>
+    <button class="opt" onclick="pick(6,2,0,this)"><span class="opt-letter">C</span>Phrase Structure Grammar</button>
+    <button class="opt" onclick="pick(6,3,0,this)"><span class="opt-letter">D</span>Shallow / Chunk Parsing</button>
+  </div>
+  <div class="qfeedback" id="q6fb"></div>
+</div>
+
+<div class="qcard">
+  <div class="qnum">Question 7</div>
+  <div class="qtext">In the sentence <em>"New York is a great city"</em>, which BIO tags apply to "New" and "York"?</div>
+  <div class="opts" id="q7opts">
+    <button class="opt" onclick="pick(7,0,2,this)"><span class="opt-letter">A</span>O, O — both are outside any entity</button>
+    <button class="opt" onclick="pick(7,1,2,this)"><span class="opt-letter">B</span>B-LOC, B-LOC — both begin separate location entities</button>
+    <button class="opt" onclick="pick(7,2,2,this)"><span class="opt-letter">C</span>B-LOC, I-LOC — "New" begins, "York" continues the same Location entity</button>
+    <button class="opt" onclick="pick(7,3,2,this)"><span class="opt-letter">D</span>I-LOC, B-LOC — "York" starts the entity, "New" continues it</button>
+  </div>
+  <div class="qfeedback" id="q7fb"></div>
+</div>
+
+</div><!-- /page -->
+
+<script>
+/* ─────────────────────────────────────────
+   STOP WORDS SET
+───────────────────────────────────────── */
+const SW = new Set(['the','a','an','is','are','was','were','be','been','being','have','has','had','do','does','did','will','would','could','should','may','might','shall','can','to','of','in','for','on','with','at','by','from','up','about','into','through','during','before','after','above','below','between','out','off','over','under','again','and','but','or','nor','so','yet','both','either','neither','not','only','very','just','as','i','me','my','we','our','you','your','he','him','his','she','her','it','its','they','them','their','what','which','who','this','that','these','those','am','if','because','while','although','however','therefore','a','in','its','the','it']);
+
+/* ─────────────────────────────────────────
+   TOKENIZATION DEMO
+───────────────────────────────────────── */
+const TOK_DATA = [
+  {w:'The',info:'<strong>The</strong> — token #1. A determiner word. Tokenizers keep it as-is.'},
+  {w:'smart',info:'<strong>smart</strong> — token #2. An adjective token.'},
+  {w:'robot',info:'<strong>robot</strong> — token #3. A noun token, the subject.'},
+  {w:'quickly',info:'<strong>quickly</strong> — token #4. An adverb.'},
+  {w:'learned',info:'<strong>learned</strong> — token #5. A verb, past tense.'},
+  {w:'natural',info:'<strong>natural</strong> — token #6. Adjective.'},
+  {w:'language',info:'<strong>language</strong> — token #7. Noun.'},
+  {w:'processing',info:'<strong>processing</strong> — token #8. Noun / gerund.'},
+  {w:'.',info:'<strong>.</strong> — token #9. Punctuation is its own token in most tokenizers.'},
+];
+document.getElementById('tokDemo').innerHTML = TOK_DATA.map((t,i)=>
+  `<div class="tok t-o" onclick="document.getElementById('tokInfo').innerHTML='${t.info.replace(/'/g,"&#39;")}'">
+    <span class="tok-word">${t.w}</span><span class="tok-tag">T-${i+1}</span>
+  </div>`).join('');
+
+/* ─────────────────────────────────────────
+   STOP WORD DEMO
+───────────────────────────────────────── */
+const STOP_SENT = 'The smart robot quickly learned natural language processing in California'.split(' ');
+document.getElementById('stopDemo').innerHTML = STOP_SENT.map(t=>{
+  const low = t.toLowerCase();
+  const stop = SW.has(low);
+  return `<div class="tok ${stop?'t-stop':'t-keep'}">
+    <span class="tok-word">${t}</span><span class="tok-tag">${stop?'STOP':'KEEP'}</span>
+  </div>`;
+}).join('');
+
+/* ─────────────────────────────────────────
+   STEM DEMO
+───────────────────────────────────────── */
+const STEM_DATA = [
+  {w:'running',stem:'run',lemma:'run'},{w:'studies',stem:'studi',lemma:'study'},
+  {w:'better',stem:'better',lemma:'good'},{w:'flies',stem:'fli',lemma:'fly'},
+  {w:'happily',stem:'happili',lemma:'happily'},{w:'was',stem:'was',lemma:'be'},
+  {w:'processed',stem:'process',lemma:'process'},{w:'quickly',stem:'quickli',lemma:'quickly'},
+];
+document.getElementById('stemDemo').innerHTML = STEM_DATA.map(d=>
+  `<div class="tok t-stem" onclick="document.getElementById('stemInfo').innerHTML='<strong>${d.w}</strong> &nbsp;→&nbsp; Stem: <strong style=\\'color:#5b21b6\\'>${d.stem}</strong> &nbsp;|&nbsp; Lemma: <strong style=\\'color:#166534\\'>${d.lemma}</strong>'">
+    <span class="tok-word">${d.w}</span><span class="tok-tag">→${d.stem}</span>
+  </div>`).join('');
+
+/* ─────────────────────────────────────────
+   POS DEMO
+───────────────────────────────────────── */
+const POS_DATA = [
+  {w:'The',tag:'DT',cls:'t-dt',info:'<strong>DT — Determiner.</strong> "The" is a definite article signalling a specific noun follows.'},
+  {w:'smart',tag:'JJ',cls:'t-jj',info:'<strong>JJ — Adjective.</strong> "smart" modifies the noun "robot". Adjectives describe properties of nouns.'},
+  {w:'robot',tag:'NN',cls:'t-nn',info:'<strong>NN — Noun (singular).</strong> "robot" is the subject — the entity performing the action.'},
+  {w:'quickly',tag:'RB',cls:'t-rp',info:'<strong>RB — Adverb.</strong> "quickly" modifies the verb "learned". Adverbs answer how, when, or where.'},
+  {w:'learned',tag:'VBD',cls:'t-vb',info:'<strong>VBD — Verb, past tense.</strong> The main action of the sentence in past tense.'},
+  {w:'natural',tag:'JJ',cls:'t-jj',info:'<strong>JJ — Adjective.</strong> "natural" modifies the compound noun "language processing".'},
+  {w:'language',tag:'NN',cls:'t-nn',info:'<strong>NN — Noun.</strong> Part of the compound noun object.'},
+  {w:'processing.',tag:'NN',cls:'t-nn',info:'<strong>NN — Noun.</strong> The direct object of "learned" — what was learned.'},
+];
+document.getElementById('posDemo').innerHTML = POS_DATA.map(t=>
+  `<div class="tok ${t.cls}" onclick="document.getElementById('posInfo').innerHTML='${t.info.replace(/'/g,"&#39;")}'" style="cursor:pointer">
+    <span class="tok-word">${t.w}</span><span class="tok-tag">${t.tag}</span>
+  </div>`).join('');
+
+/* ─────────────────────────────────────────
+   NER DEMO
+───────────────────────────────────────── */
+const NER_DATA = [
+  {w:'Sundar',tag:'B-PER',cls:'t-nn'},{w:'Pichai,',tag:'I-PER',cls:'t-nn'},
+  {w:'CEO',tag:'O',cls:'t-o'},{w:'of',tag:'O',cls:'t-o'},
+  {w:'Google,',tag:'B-ORG',cls:'t-vb'},{w:'announced',tag:'O',cls:'t-o'},
+  {w:'plans',tag:'O',cls:'t-o'},{w:'to',tag:'O',cls:'t-o'},
+  {w:'invest',tag:'O',cls:'t-o'},{w:'$100',tag:'B-MON',cls:'t-rp'},
+  {w:'billion',tag:'I-MON',cls:'t-rp'},{w:'in',tag:'O',cls:'t-o'},
+  {w:'California',tag:'B-LOC',cls:'t-jj'},{w:'by',tag:'O',cls:'t-o'},
+  {w:'2027.',tag:'B-DAT',cls:'t-dt'},
+];
+document.getElementById('nerDemo').innerHTML = NER_DATA.map(t=>
+  `<div class="tok ${t.cls}">
+    <span class="tok-word">${t.w}</span><span class="tok-tag">${t.tag}</span>
+  </div>`).join('');
+
+/* ─────────────────────────────────────────
+   EXAMPLES ENGINE
+───────────────────────────────────────── */
+const EXAMPLES = [
+  'Sundar Pichai, CEO of Google, announced plans to invest $100 billion in AI infrastructure across California by 2027.',
+  'NASA scientists at JPL confirmed the Perseverance rover collected rock samples on Mars in January 2024.',
+  'Goldman Sachs reported a $3.2 billion profit for Q3 2024, beating Wall Street expectations by a wide margin.',
+  'On June 6, 1944, General Dwight Eisenhower led Allied forces to Normandy in the largest amphibious invasion in history.',
+];
+
+const NER_RULES=[
+  {re:/^Sundar$/i,tag:'B-PER',type:'Person',cls:'t-nn'},
+  {re:/^Pichai[,.]?$/i,tag:'I-PER',type:'Person',cls:'t-nn'},
+  {re:/^Elon$/i,tag:'B-PER',type:'Person',cls:'t-nn'},
+  {re:/^Musk[,.]?$/i,tag:'I-PER',type:'Person',cls:'t-nn'},
+  {re:/^General$/,tag:'B-PER',type:'Person',cls:'t-nn'},
+  {re:/^Dwight$/i,tag:'I-PER',type:'Person',cls:'t-nn'},
+  {re:/^Eisenhower$/i,tag:'I-PER',type:'Person',cls:'t-nn'},
+  {re:/^Google[,.]?$/i,tag:'B-ORG',type:'Organization',cls:'t-vb'},
+  {re:/^NASA$/,tag:'B-ORG',type:'Organization',cls:'t-vb'},
+  {re:/^JPL[,.]?$/,tag:'I-ORG',type:'Organization',cls:'t-vb'},
+  {re:/^Goldman$/i,tag:'B-ORG',type:'Organization',cls:'t-vb'},
+  {re:/^Sachs[,.]?$/i,tag:'I-ORG',type:'Organization',cls:'t-vb'},
+  {re:/^Wall$/,tag:'B-ORG',type:'Organization',cls:'t-vb'},
+  {re:/^Street[,.]?$/,tag:'I-ORG',type:'Organization',cls:'t-vb'},
+  {re:/^Allied$/i,tag:'B-ORG',type:'Organization',cls:'t-vb'},
+  {re:/^California[,.]?$/i,tag:'B-LOC',type:'Location',cls:'t-jj'},
+  {re:/^Mars[,.]?$/i,tag:'B-LOC',type:'Location',cls:'t-jj'},
+  {re:/^Normandy[,.]?$/i,tag:'B-LOC',type:'Location',cls:'t-jj'},
+  {re:/^New$/,tag:'B-LOC',type:'Location',cls:'t-jj'},
+  {re:/^York[,.]?$/i,tag:'I-LOC',type:'Location',cls:'t-jj'},
+  {re:/^\$[\d.,]+$/,tag:'B-MON',type:'Money',cls:'t-rp'},
+  {re:/^billion[,.]?$/i,tag:'I-MON',type:'Money',cls:'t-rp'},
+  {re:/^million[,.]?$/i,tag:'I-MON',type:'Money',cls:'t-rp'},
+  {re:/^20\d\d[,.]?$/,tag:'B-DAT',type:'Date',cls:'t-dt'},
+  {re:/^1944[,.]?$/,tag:'B-DAT',type:'Date',cls:'t-dt'},
+  {re:/^Q[1-4]$/,tag:'B-DAT',type:'Date',cls:'t-dt'},
+  {re:/^January[,.]?$/i,tag:'B-DAT',type:'Date',cls:'t-dt'},
+  {re:/^June$/i,tag:'B-DAT',type:'Date',cls:'t-dt'},
+  {re:/^6[,]?$/,tag:'I-DAT',type:'Date',cls:'t-dt'},
+];
+
+const POS_RULES=[
+  {re:/^(the|a|an|this|that|these|those|each|every|some|any|no|all|both|either|neither|such|what)$/i,tag:'DT',cls:'t-dt'},
+  {re:/^(in|on|at|by|for|with|to|of|from|into|through|during|before|after|above|below|between|over|under|about|since|until|along|across|behind|beyond|near|among|across)$/i,tag:'IN',cls:'t-in'},
+  {re:/^(and|but|or|nor|yet|so|although|because|while|if|unless|until|since|though|as|when|where|whether|that)$/i,tag:'CC',cls:'t-cc'},
+  {re:/^(i|me|my|we|our|you|your|he|him|his|she|her|it|its|they|them|their|who|which|what)$/i,tag:'PR',cls:'t-pr'},
+  {re:/^(announced|invested|confirmed|collected|reported|beating|led|earned|worked|learned|plans|invest|beat|run|go|is|are|was|were|be|been)$/i,tag:'VBD',cls:'t-vb'},
+  {re:/^(quickly|widely|largely|recently|finally|however|therefore|still|already|also|just|never|always|often|very|really|highly|deeply|simply|only|now|then|here|there|soon|again)$/i,tag:'RB',cls:'t-rp'},
+  {re:/^(good|great|new|old|big|small|large|high|low|long|short|strong|smart|natural|specific|public|main|major|local|global|final|early|late|recent|current|next|last|first|second|third|technical|digital|wide|amphibious|largest)$/i,tag:'JJ',cls:'t-jj'},
+  {re:/^(is|are|was|were|be|been|will|would|could|should|may|might|can|have|has|had|do|does|did)$/i,tag:'MD',cls:'t-vb'},
+];
+
+function classifyPOS(tok){
+  const clean=tok.replace(/[.,!?;:'"()]/g,'');
+  for(const r of POS_RULES) if(r.re.test(clean)) return{tag:r.tag,cls:r.cls};
+  if(/^[A-Z][a-z]/.test(tok)||/^[A-Z]+$/.test(clean)) return{tag:'NNP',cls:'t-nn'};
+  if(/\d/.test(tok)) return{tag:'CD',cls:'t-dt'};
+  if(/s$/.test(clean)&&clean.length>3) return{tag:'NNS',cls:'t-nn'};
+  return{tag:'NN',cls:'t-nn'};
+}
+function classifyNER(tok){
+  for(const r of NER_RULES) if(r.re.test(tok)) return{tag:r.tag,type:r.type,cls:r.cls};
+  return{tag:'O',type:null,cls:'t-o'};
+}
+function simpleStem(w){
+  w=w.toLowerCase().replace(/[.,!?;:'"()]/g,'');
+  if(w.endsWith('ing')&&w.length>5)return w.slice(0,-3);
+  if(w.endsWith('tion'))return w.slice(0,-3);
+  if(w.endsWith('ness'))return w.slice(0,-4);
+  if(w.endsWith('ment'))return w.slice(0,-4);
+  if(w.endsWith('ies'))return w.slice(0,-3)+'y';
+  if(w.endsWith('ed')&&w.length>4)return w.slice(0,-2);
+  if(w.endsWith('er')&&w.length>4)return w.slice(0,-2);
+  if(w.endsWith('ly')&&w.length>4)return w.slice(0,-2);
+  return w;
+}
+function buildToks(tokens,cls,tagFn){
+  return tokens.map(t=>`<div class="tok ${cls(t)}"><span class="tok-word">${t}</span><span class="tok-tag">${tagFn(t)}</span></div>`).join('');
+}
+
+function loadExample(idx, el){
+  document.querySelectorAll('.ex-item').forEach(e=>e.classList.remove('active'));
+  el.classList.add('active');
+  const text = EXAMPLES[idx];
+  const tokens = text.match(/\S+/g)||[];
+
+  // STOP
+  const stopHTML = tokens.map(t=>{
+    const low=t.toLowerCase().replace(/[.,!?;:'"()]/g,'');
+    const stop=SW.has(low);
+    return`<div class="tok ${stop?'t-stop':'t-keep'}"><span class="tok-word">${t}</span><span class="tok-tag">${stop?'STOP':'KEEP'}</span></div>`;
+  }).join('');
+
+  // STEM (content only)
+  const content = tokens.filter(t=>!SW.has(t.toLowerCase().replace(/[.,!?;:'"()]/g,'')));
+  const stemHTML = content.map(t=>`<div class="tok t-stem"><span class="tok-word">${t}</span><span class="tok-tag">${simpleStem(t)}</span></div>`).join('');
+
+  // POS
+  const POS_EXP={DT:'Determiner',IN:'Preposition',CC:'Conjunction',PR:'Pronoun',VBD:'Verb',MD:'Modal',RB:'Adverb',JJ:'Adjective',NN:'Noun',NNS:'Noun(pl)',NNP:'Proper Noun',CD:'Number'};
+  const posHTML = tokens.map(t=>{const{tag,cls}=classifyPOS(t);return`<div class="tok ${cls}"><span class="tok-word">${t}</span><span class="tok-tag">${tag}</span></div>`;}).join('');
+
+  // NER tokens
+  const nerTokHTML = tokens.map(t=>{const{tag,cls}=classifyNER(t);return`<div class="tok ${cls}"><span class="tok-word">${t}</span><span class="tok-tag">${tag}</span></div>`;}).join('');
+
+  // NER entities
+  const entities=[];let i=0;
+  while(i<tokens.length){
+    const{tag,type}=classifyNER(tokens[i]);
+    if(tag.startsWith('B-')){let phrase=tokens[i],j=i+1;while(j<tokens.length&&classifyNER(tokens[j]).tag.startsWith('I-')){phrase+=' '+tokens[j];j++;}entities.push({phrase,type});i=j;}else i++;
+  }
+  const chipMap={Person:'chip-per',Organization:'chip-org',Location:'chip-loc',Date:'chip-dat',Money:'chip-mon'};
+  const entHTML = entities.length
+    ? entities.map(e=>`<div class="entity-chip ${chipMap[e.type]||'chip-org'}" style="margin-bottom:6px">${e.phrase}<span class="chip-type">${e.type}</span></div>`).join('')
+    : '<p style="font-size:.82rem;color:#888">No entities detected.</p>';
+
+  document.getElementById('exampleOutput').innerHTML = `
+    <div class="ex-step-card">
+      <div class="ex-step-head"><div class="badge">1</div><span>Tokenization</span></div>
+      <div class="ex-step-body"><div class="tokens-wrap">${tokens.map(t=>`<div class="tok t-o"><span class="tok-word">${t}</span><span class="tok-tag">TOKEN</span></div>`).join('')}</div></div>
+    </div>
+    <div class="ex-step-card">
+      <div class="ex-step-head"><div class="badge">2</div><span>Stop Word Removal — <span style="color:#991b1b">red removed</span> · <span style="color:#166534">green kept</span></span></div>
+      <div class="ex-step-body"><div class="tokens-wrap">${stopHTML}</div></div>
+    </div>
+    <div class="ex-step-card">
+      <div class="ex-step-head"><div class="badge">3</div><span>Stemming (content words only)</span></div>
+      <div class="ex-step-body"><div class="tokens-wrap">${stemHTML}</div></div>
+    </div>
+    <div class="ex-step-card">
+      <div class="ex-step-head"><div class="badge">4</div><span>POS Tagging</span></div>
+      <div class="ex-step-body"><div class="tokens-wrap">${posHTML}</div></div>
+    </div>
+    <div class="ex-step-card">
+      <div class="ex-step-head"><div class="badge">5</div><span>Named Entity Recognition (BIO Tags)</span></div>
+      <div class="ex-step-body">
+        <div class="tokens-wrap">${nerTokHTML}</div>
+        <div style="margin-top:.6rem">${entHTML}</div>
+      </div>
+    </div>
+  `;
+}
+
+/* ─────────────────────────────────────────
+   QUIZ
+───────────────────────────────────────── */
+const EXP={
+  1:{text:['Stop word removal is a separate, later step — not what tokenization does.','✅ Correct! Tokenization converts raw text into a sequence of tokens that all subsequent pipeline steps (POS, NER, parsing) can operate on.','Translation is a downstream NLP task, not part of tokenization.','NER happens much later in the pipeline, after tokenization, POS and parsing.']},
+  2:{text:['Actually fine — removing stop words from keyword indexing gives better TF-IDF scores.','Document clustering benefits from stop word removal — function words add noise.','✅ Correct! "Not bad" after stop word removal becomes just "bad" — completely inverting the sentiment! Words like "not" are stop words but are critical for meaning.','Keyword extraction is exactly where stop word removal helps most.']},
+  3:{text:['✅ Correct! Stemming crudely chops word suffixes using rules (studies→studi, possibly creating non-words). Lemmatization uses vocabulary lookup and grammar to produce the true dictionary form (studies→study).','Both work on all parts of speech — verbs, nouns, adjectives.','Lemmatization is actually more accurate — it always produces real dictionary words.','They use completely different approaches with different accuracy and speed tradeoffs.']},
+  4:{text:['O means Outside any entity — the I- prefix means something different.','✅ Correct! I- means Inside — this token continues a named entity that was already started by a B- tag. For example: "Goldman(B-ORG) Sachs(I-ORG)".','Identifier is not an NLP term for BIO tagging.','A new entity always starts with B-, never I-.']},
+  5:{text:['"quickly" describes how an action is done — that makes it an adverb, not a noun.','Adjectives (JJ) describe nouns — "quick fox". "Quickly" describes a verb, so it is an adverb.','✅ Correct! "quickly" is tagged RB (Adverb). It modifies the verb "learned", answering the question "how did the learning happen?"','Verbs denote actions or states — "quickly" modifies an action but is not itself one.']},
+  6:{text:['✅ Correct! Dependency Parsing draws directed arcs (arrows) between individual words — each arc labelled with the grammatical relationship (nsubj, dobj, advmod, etc.). Very popular in modern NLP.','Constituency Parsing groups words into nested phrases (NP, VP, PP) — it does not draw direct word-to-word arcs.','Phrase Structure Grammar is another name for Constituency Parsing.','Shallow / Chunk Parsing only identifies major phrase boundaries, not full tree structure.']},
+  7:{text:['"New York" is clearly a location — both words are part of it, so O is wrong.','Two B-LOC tags would mean two separate single-word location entities, not the two-word "New York".','✅ Correct! "New" is B-LOC (Begins the Location entity) and "York" is I-LOC (Inside / continues the same entity). BIO tagging lets us encode multi-word entities as a single unit.','B- always marks the beginning of an entity — it\'s "New" that begins, not "York".']},
+};
+const answered={};let correctCount=0;
+function pick(qnum,optIdx,correctIdx,btn){
+  if(answered[qnum]!==undefined)return;
+  answered[qnum]=optIdx;
+  const isCorrect=optIdx===correctIdx;
+  if(isCorrect)correctCount++;
+  const opts=document.querySelectorAll('#q'+qnum+'opts .opt');
+  opts.forEach((b,i)=>{b.disabled=true;if(i===correctIdx&&!isCorrect)b.classList.add('show-correct');});
+  opts[optIdx].classList.add(isCorrect?'correct':'wrong');
+  const fb=document.getElementById('q'+qnum+'fb');
+  fb.className='qfeedback '+(isCorrect?'ok':'no');
+  fb.innerHTML=EXP[qnum].text[optIdx];
+  const done=Object.keys(answered).length;
+  document.getElementById('scoreNum').textContent=correctCount+' / 7';
+  if(done<7){
+    document.getElementById('scoreTitle').textContent=correctCount+' correct so far';
+    document.getElementById('scoreMsg').textContent=(7-done)+' question'+(7-done>1?'s':'')+' remaining.';
+  } else {
+    const pct=Math.round(correctCount/7*100);
+    document.getElementById('scoreTitle').textContent=pct>=85?'Excellent! You understand the NLP Pipeline 🎉':pct>=57?'Good effort — review the red answers above.':'Keep studying — it takes practice!';
+    document.getElementById('scoreMsg').textContent='Final score: '+correctCount+'/7 ('+pct+'%)';
+  }
+}
+
+/* ─── INIT ─── */
+loadExample(0, document.getElementById('exItem0'));
+</script>
+</body>
+</html>
